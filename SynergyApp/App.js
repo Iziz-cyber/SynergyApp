@@ -1,5 +1,5 @@
 const state = {
-  user: null,        
+  user: null,     
   insumos: [],         
   productos: [],       
   nextId: 1,
@@ -8,11 +8,61 @@ const state = {
 let usosTemp = [];
 let editingProductId = null; 
 
+let temaActual = 'auto';
+let paletaActual = 'bosque';
+
+function calcularTemaVisible(tema){
+  if(tema === 'auto'){
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  return tema;
+}
+function aplicarTema(tema){
+  temaActual = tema;
+  document.documentElement.setAttribute('data-theme', calcularTemaVisible(tema));
+}
+function aplicarPaleta(paleta){
+  paletaActual = paleta;
+  document.documentElement.setAttribute('data-palette', paleta);
+}
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', ()=>{
+  if(temaActual === 'auto') aplicarTema('auto');
+});
+
+(function aplicarPreferenciasDesdeURL(){
+  const params = new URLSearchParams(window.location.search);
+  aplicarTema(params.get('tema') || 'auto');
+  aplicarPaleta(params.get('paleta') || 'bosque');
+})();
+
+
+let usuarioRecordado = null;
+
+(function revisarRegresoDeSesion(){
+  const params = new URLSearchParams(window.location.search);
+  const correo = params.get('correo');
+  if(!correo) return; 
+
+  usuarioRecordado = {
+    correo,
+    nombre: params.get('nombre') || '',
+    emprendimiento: params.get('negocio') || '',
+    categoria: params.get('categoria') || '',
+  };
+
+  document.getElementById('onboarding-overlay').classList.add('hidden');
+  document.getElementById('auth-screen').classList.remove('hidden');
+  showAuthCard('login-card');
+  document.getElementById('log-correo').value = correo;
+  document.getElementById('log-password').focus();
+})();
+
 const iconsSvg = {
   inventario:'<svg class="icon" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>',
   insumos:'<svg class="icon" viewBox="0 0 24 24"><path d="M9 3h6M10 3v5.2L5.5 17a2 2 0 0 0 1.8 3h9.4a2 2 0 0 0 1.8-3L14 8.2V3"/></svg>',
   finanzas:'<svg class="icon" viewBox="0 0 24 24"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>',
 };
+
 const tourSteps = [
   {
     icon:'<svg class="icon" viewBox="0 0 24 24" style="stroke:#fff"><path d="M12 3 4 8v13h16V8Z"/><path d="M9 21v-6h6v6"/></svg>',
@@ -111,8 +161,19 @@ document.getElementById('login-form').addEventListener('submit', function(e){
   const correo = document.getElementById('log-correo').value.trim();
   const password = document.getElementById('log-password').value;
 
-  const correoOk = state.user && correo === state.user.correo;
-  const passOk = state.user && password === state.user.password;
+  let correoOk, passOk;
+  if(state.user){
+  
+    correoOk = correo === state.user.correo;
+    passOk = password === state.user.password;
+  } else if(usuarioRecordado){
+
+    correoOk = correo === usuarioRecordado.correo;
+    passOk = password.length > 0;
+    if(correoOk && passOk) state.user = { ...usuarioRecordado, password };
+  } else {
+    correoOk = false; passOk = false;
+  }
 
   const ok = validate([
     {field:'correo', valid: correoOk},
@@ -120,12 +181,25 @@ document.getElementById('login-form').addEventListener('submit', function(e){
   ]);
   if(!ok) return;
 
+
   showAuthCard('loading-card');
   setTimeout(()=>{
-    document.getElementById('auth-screen').classList.add('hidden');
-    launchDashboard();
+    irAlDashboard();
   }, 900);
 });
+
+function irAlDashboard(){
+  const params = new URLSearchParams({
+    nombre: state.user.nombre,
+    negocio: state.user.emprendimiento,
+    categoria: state.user.categoria,
+    correo: state.user.correo,
+    tema: temaActual,
+    paleta: paletaActual,
+  });
+
+  window.location.href = `Dashboard-Control/dash-index.html?${params.toString()}`;
+}
 
 function showToast(msg){
   const t = document.getElementById('toast');
@@ -229,6 +303,7 @@ function renderInsumos(){
         </button>
       </div>
     </div>`).join('');
+
 
   const picker = document.getElementById('picker-insumo');
   const current = picker.value;
